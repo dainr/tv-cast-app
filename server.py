@@ -134,6 +134,12 @@ try:
             if 'text/html' in content_type:
                 html_content = r.text
                 html_content = strip_frame_restrictive_meta(html_content)
+                
+                # Base tag injection to resolve relative references correctly
+                parsed_target = urllib.parse.urlparse(target_url)
+                base_url = f"{parsed_target.scheme}://{parsed_target.netloc}{parsed_target.path}"
+                base_tag = f'<base href="{base_url}">'
+                
                 script_to_inject = """<script>
                 (function() {
                     try {
@@ -143,11 +149,11 @@ try:
                 })();
                 </script>"""
                 if '<head>' in html_content:
-                    html_content = html_content.replace('<head>', '<head>' + script_to_inject, 1)
+                    html_content = html_content.replace('<head>', '<head>' + base_tag + script_to_inject, 1)
                 elif '<html>' in html_content:
-                    html_content = html_content.replace('<html>', '<html>' + script_to_inject, 1)
+                    html_content = html_content.replace('<html>', '<html>' + base_tag + script_to_inject, 1)
                 else:
-                    html_content = script_to_inject + html_content
+                    html_content = base_tag + script_to_inject + html_content
 
                 response = Response(html_content, status=r.status_code)
                 for name, value in resp_headers:
@@ -241,6 +247,12 @@ except ImportError as e:
                         if is_html:
                             html_content = response.read().decode('utf-8', errors='ignore')
                             html_content = strip_frame_restrictive_meta(html_content)
+                            
+                            # Base tag injection to resolve relative references correctly
+                            parsed_target = urllib.parse.urlparse(target_url)
+                            base_url = f"{parsed_target.scheme}://{parsed_target.netloc}{parsed_target.path}"
+                            base_tag = f'<base href="{base_url}">'
+                            
                             script_to_inject = """<script>
                             (function() {
                                 try {
@@ -250,11 +262,11 @@ except ImportError as e:
                             })();
                             </script>"""
                             if '<head>' in html_content:
-                                html_content = html_content.replace('<head>', '<head>' + script_to_inject, 1)
+                                html_content = html_content.replace('<head>', '<head>' + base_tag + script_to_inject, 1)
                             elif '<html>' in html_content:
-                                html_content = html_content.replace('<html>', '<html>' + script_to_inject, 1)
+                                html_content = html_content.replace('<html>', '<html>' + base_tag + script_to_inject, 1)
                             else:
-                                html_content = script_to_inject + html_content
+                                html_content = base_tag + script_to_inject + html_content
                             self.wfile.write(html_content.encode('utf-8'))
                         else:
                             while True:
