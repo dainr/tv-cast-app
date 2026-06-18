@@ -105,12 +105,36 @@ try:
                 'content-encoding', 'image/x-icon', 'transfer-encoding', 
                 'connection', 'x-frame-options', 'content-security-policy'
             ]
-
             resp_headers = [
                 (name, value) for (name, value) in r.raw.headers.items()
                 if name.lower() not in excluded_headers
             ]
             
+            # Detect HTML pages to inject frame-busting bypass script
+            content_type = r.headers.get('Content-Type', '')
+            if 'text/html' in content_type:
+                html_content = r.text
+                script_to_inject = """<script>
+                (function() {
+                    try {
+                        Object.defineProperty(window, 'top', { get: function() { return window.self; } });
+                        Object.defineProperty(window, 'parent', { get: function() { return window.self; } });
+                    } catch(e) {}
+                })();
+                </script>"""
+                if '<head>' in html_content:
+                    html_content = html_content.replace('<head>', '<head>' + script_to_inject, 1)
+                elif '<html>' in html_content:
+                    html_content = html_content.replace('<html>', '<html>' + script_to_inject, 1)
+                else:
+                    html_content = script_to_inject + html_content
+
+                response = Response(html_content, status=r.status_code)
+                for name, value in resp_headers:
+                    response.headers[name] = value
+                response.headers['Access-Control-Allow-Origin'] = '*'
+                return response
+
             # Create a streaming response back to the client
             def generate_stream():
                 for chunk in r.iter_content(chunk_size=65536):
@@ -182,18 +206,41 @@ except ImportError as e:
                         req.add_header('Range', range_header)
 
                     with urllib.request.urlopen(req, timeout=10) as response:
+                        content_type = response.headers.get('Content-Type', '')
+                        is_html = 'text/html' in content_type
+
                         self.send_response(200)
                         for header in ['Content-Type', 'Content-Length', 'Content-Range', 'Accept-Ranges']:
                             val = response.headers.get(header)
                             if val:
+                                if is_html and header == 'Content-Length':
+                                    continue
                                 self.send_header(header, val)
                         self.end_headers()
                         
-                        while True:
-                            chunk = response.read(65536)
-                            if not chunk:
-                                break
-                            self.wfile.write(chunk)
+                        if is_html:
+                            html_content = response.read().decode('utf-8', errors='ignore')
+                            script_to_inject = """<script>
+                            (function() {
+                                try {
+                                    Object.defineProperty(window, 'top', { get: function() { return window.self; } });
+                                    Object.defineProperty(window, 'parent', { get: function() { return window.self; } });
+                                } catch(e) {}
+                            })();
+                            </script>"""
+                            if '<head>' in html_content:
+                                html_content = html_content.replace('<head>', '<head>' + script_to_inject, 1)
+                            elif '<html>' in html_content:
+                                html_content = html_content.replace('<html>', '<html>' + script_to_inject, 1)
+                            else:
+                                html_content = script_to_inject + html_content
+                            self.wfile.write(html_content.encode('utf-8'))
+                        else:
+                            while True:
+                                chunk = response.read(65536)
+                                if not chunk:
+                                    break
+                                self.wfile.write(chunk)
                 except Exception as e:
                     self.send_response(500)
                     self.end_headers()
