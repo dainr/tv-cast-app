@@ -89,8 +89,11 @@ try:
             return send_from_path('public', 'index.html')
         return send_from_path('public', path)
 
-except ImportError:
+except ImportError as e:
     # Fallback to standard HTTP library if Flask is not installed (no dependencies required for local run)
+    print(f"Warning: Flask imports failed, falling back to built-in HTTP server. Error: {e}", file=sys.stderr)
+    import traceback
+    traceback.print_exc()
     HAS_FLASK = False
     import http.server
     import socketserver
