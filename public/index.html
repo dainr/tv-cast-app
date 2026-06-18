@@ -176,21 +176,36 @@
 
     // Start playing the casted media
     var hlsInstance = null;
+    var currentRawUrl = "";
+    var isProxyActive = false;
+
+    // Error listener for fallback loading
+    video.onerror = function() {
+      if (video.src && !isProxyActive && currentRawUrl && currentRawUrl.indexOf('http') === 0) {
+        console.log("Direct playback failed. Retrying via CORS bypass proxy...");
+        showToast("Direct load failed. Retrying with CORS bypass proxy...");
+        playMediaWithConfig(currentRawUrl, true);
+      } else {
+        showToast("Playback failed. Video format unsupported by this TV browser.");
+      }
+    };
 
     function playMedia(url) {
-      showToast('New media received! Loading...');
+      playMediaWithConfig(url, false);
+    }
+
+    function playMediaWithConfig(url, useProxy) {
+      currentRawUrl = url;
+      isProxyActive = useProxy;
+
+      showToast(useProxy ? 'Loading via proxy...' : 'New media received! Loading...');
       
-      // Determine if we should proxy the stream.
-      // Many streams have CORS restrictions, so proxying through our node server helps bypass them.
       var finalUrl = url;
-      
-      // If it looks like a direct media link (e.g., mp4, m3u8, webm, mp3) or needs CORS bypass,
-      // we funnel it through the proxy server.
-      if (url.startsWith('http')) {
+      if (useProxy && url.indexOf('http') === 0) {
         finalUrl = '/api/proxy?url=' + encodeURIComponent(url);
       }
 
-      console.log('Playing media source:', finalUrl);
+      console.log('Playing media source (useProxy=' + useProxy + '):', finalUrl);
 
       // Clean up previous HLS instance if it exists
       if (hlsInstance) {
@@ -249,6 +264,7 @@
       showToast('Autoplay blocked or load failed. Click TV screen to play.');
       console.log("Playback interaction required: ", error);
     }
+
 
 
     // Interactive fallback for older TVs that require user gesture to trigger video play

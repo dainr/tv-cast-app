@@ -118,6 +118,40 @@ class TVCastClient:
         self.title_var.set("Stream Clip")
         self.update_status("Fields cleared.")
 
+    def resolve_url_locally(self, url):
+        # Quick check for direct media links
+        lower_path = urllib.parse.urlparse(url).path.lower()
+        if lower_path.endswith(('.mp4', '.webm', '.m3u8', '.mp3', '.ogg', '.ogv', '.mov', '.ts', '.aac', '.wav')):
+            return url
+
+        self.update_status("Decoding video link locally (using yt-dlp)...")
+        self.root.update_idletasks()
+        
+        try:
+            import yt_dlp
+            ydl_opts = {
+                'format': 'best',
+                'quiet': True,
+                'no_warnings': True,
+                'skip_download': True
+            }
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(url, download=False)
+                if 'entries' in info:
+                    info = info['entries'][0]
+                
+                direct_url = info.get('url')
+                if direct_url:
+                    self.update_status("Decoding successful!")
+                    return direct_url
+        except ImportError:
+            self.update_status("yt-dlp not found on client. Sending raw URL...")
+        except Exception as e:
+            self.update_status(f"Decoding failed. Sending raw URL...")
+            print(f"yt-dlp error: {e}")
+        
+        return url
+
     def send_play_command(self):
         server_ip = self.server_ip_var.get().strip()
         media_url = self.url_var.get().strip()
@@ -131,9 +165,12 @@ class TVCastClient:
             messagebox.showerror("Validation Error", "Please provide a valid Video/Stream URL.")
             return
 
+        # Resolve webpage URL to direct stream URL locally on the client's network
+        resolved_url = self.resolve_url_locally(media_url)
+
         # Prepare payload
         payload = {
-            "url": media_url,
+            "url": resolved_url,
             "title": media_title
         }
         
@@ -142,6 +179,7 @@ class TVCastClient:
             server_ip = "http://" + server_ip
 
         endpoint = f"{server_ip}/api/play"
+
         
         self.update_status("Transmitting media packet...")
         
