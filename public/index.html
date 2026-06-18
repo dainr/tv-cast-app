@@ -122,7 +122,7 @@
 <body>
 
   <div id="display-container">
-    <video id="video-player" controls autoplay playsinline name="media"></video>
+    <video id="video-player" controls autoplay muted playsinline name="media"></video>
     <iframe id="web-frame" style="position:absolute; top:0; left:0; width:100%; height:100%; border:none; display:none; background:#000;" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>
 
     <div id="idle-screen">
@@ -279,17 +279,27 @@
     }
 
     function handlePlayBlock(error) {
-      showToast('Autoplay blocked or load failed. Click TV screen to play.');
+      showToast('Autoplay blocked. Tap screen to play with audio.');
       console.log("Playback interaction required: ", error);
     }
+
+    // Try unmuting automatically once play succeeds
+    video.onplaying = function() {
+      // Small timeout to satisfy browser play triggers
+      setTimeout(function() {
+        video.muted = false;
+      }, 300);
+    };
+
 
 
 
     // Interactive fallback for older TVs that require user gesture to trigger video play
     document.body.addEventListener('click', () => {
-      if (video.src && video.paused) {
+      if (video.src) {
+        video.muted = false;
         video.play();
-        showToast('Playback resumed');
+        showToast('Playback started with audio');
       }
     });
 
