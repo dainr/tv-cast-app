@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TV Display Receiver</title>
+  <style>
+    /* Premium modern dark UI */
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    
+    body, html {
+      width: 100%;
+      height: 100%;
+      background-color: #0b0c10;
+      color: #c5c6c7;
+      font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+      overflow: hidden;
+    }
+
+    #display-container {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    #video-player {
+      width: 100%;
+      height: 100%;
+      background-color: #000;
+      display: none;
+    }
+
+    /* Idle / Waiting Screen */
+    #idle-screen {
+      text-align: center;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 10;
+      transition: opacity 0.5s ease;
+    }
+
+    .glow-circle {
+      width: 120px;
+      height: 120px;
+      border-radius: 50%;
+      background: radial-gradient(circle, #66fcf1 0%, rgba(102, 252, 241, 0.1) 70%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 30px;
+      box-shadow: 0 0 20px rgba(102, 252, 241, 0.4);
+      animation: pulse 2s infinite ease-in-out;
+    }
+
+    .glow-circle svg {
+      width: 50px;
+      height: 50px;
+      fill: #1f2833;
+    }
+
+    h1 {
+      font-size: 2.5rem;
+      color: #ffffff;
+      margin-bottom: 15px;
+      letter-spacing: 2px;
+      text-shadow: 0 0 10px rgba(255, 255, 255, 0.2);
+    }
+
+    p {
+      font-size: 1.2rem;
+      color: #66fcf1;
+      margin-bottom: 25px;
+    }
+
+    .instructions {
+      background-color: #1f2833;
+      padding: 15px 30px;
+      border-radius: 30px;
+      border: 1px solid #45a29e;
+      font-size: 1rem;
+      color: #c5c6c7;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+    }
+
+    /* Notifications / Toast info */
+    #toast {
+      position: absolute;
+      bottom: 40px;
+      left: 50%;
+      transform: translateX(-50%);
+      background-color: rgba(31, 40, 51, 0.9);
+      color: #66fcf1;
+      padding: 12px 24px;
+      border-radius: 8px;
+      border-left: 4px solid #66fcf1;
+      font-weight: bold;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+      z-index: 100;
+      pointer-events: none;
+    }
+
+    @keyframes pulse {
+      0% { transform: scale(0.95); box-shadow: 0 0 15px rgba(102, 252, 241, 0.3); }
+      50% { transform: scale(1.05); box-shadow: 0 0 30px rgba(102, 252, 241, 0.6); }
+      100% { transform: scale(0.95); box-shadow: 0 0 15px rgba(102, 252, 241, 0.3); }
+    }
+  </style>
+</head>
+<body>
+
+  <div id="display-container">
+    <video id="video-player" controls autoplay playsinline name="media"></video>
+
+    <div id="idle-screen">
+      <div class="glow-circle">
+        <svg viewBox="0 0 24 24">
+          <path d="M21 3H3c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h5v2h8v-2h5c1.1 0 1.99-.9 1.99-2L23 5c0-1.1-.9-2-2-2zm0 14H3V5h18v12zM21 6H3v10h18V6z"/>
+        </svg>
+      </div>
+      <h1>TV CAST RECEIVER</h1>
+      <p id="server-url">Waiting for connection...</p>
+      <div class="instructions">Open the desktop client controller to start playing streams</div>
+    </div>
+
+    <div id="toast">Casting stream...</div>
+  </div>
+
+  <script>
+    const video = document.getElementById('video-player');
+    const idleScreen = document.getElementById('idle-screen');
+    const toast = document.getElementById('toast');
+    const serverUrlDisplay = document.getElementById('server-url');
+
+    // Display the current URL
+    serverUrlDisplay.innerText = "Host IP / Server: " + window.location.host;
+
+    let lastTimestamp = 0;
+
+    // Show a small toast notification
+    function showToast(text) {
+      toast.innerText = text;
+      toast.style.opacity = '1';
+      setTimeout(() => {
+        toast.style.opacity = '0';
+      }, 3000);
+    }
+
+    // Polling function designed to work on all TV browsers (including legacy ones lacking WebSockets/SSE)
+    async function checkState() {
+      try {
+        const response = await fetch('/api/state');
+        if (!response.ok) return;
+        
+        const data = await response.json();
+        if (data.url && data.timestamp > lastTimestamp) {
+          lastTimestamp = data.timestamp;
+          playMedia(data.url);
+        }
+      } catch (err) {
+        console.error('Error checking state:', err);
+      }
+    }
+
+    // Start playing the casted media
+    function playMedia(url) {
+      showToast('New media received! Loading...');
+      
+      // Determine if we should proxy the stream.
+      // Many streams have CORS restrictions, so proxying through our node server helps bypass them.
+      let finalUrl = url;
+      
+      // If it looks like a direct media link (e.g., mp4, m3u8, webm, mp3) or needs CORS bypass,
+      // we funnel it through the proxy server.
+      if (url.startsWith('http')) {
+        finalUrl = '/api/proxy?url=' + encodeURIComponent(url);
+      }
+
+      console.log('Playing media source:', finalUrl);
+
+      // Reset video
+      video.style.display = 'block';
+      idleScreen.style.display = 'none';
+
+      video.src = finalUrl;
+      video.load();
+      
+      const playPromise = video.play();
+      if (playPromise !== undefined) {
+        playPromise.then(_ => {
+          showToast('Playing stream');
+        }).catch(error => {
+          showToast('Autoplay blocked or load failed. Click TV screen to play.');
+          console.log("Playback interaction required: ", error);
+        });
+      }
+    }
+
+    // Interactive fallback for older TVs that require user gesture to trigger video play
+    document.body.addEventListener('click', () => {
+      if (video.src && video.paused) {
+        video.play();
+        showToast('Playback resumed');
+      }
+    });
+
+    // Run poll every 2 seconds
+    setInterval(checkState, 2000);
+    
+    // Initial check
+    checkState();
+  </script>
+</body>
+</html>
