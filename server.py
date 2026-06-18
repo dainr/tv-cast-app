@@ -12,8 +12,44 @@ current_media = {
     "title": "No media playing"
 }
 
+
+def resolve_media_url(url):
+    if not url:
+        return url
+    
+    # If the URL is already a direct link to a media file, bypass resolution to save time
+    lower_path = urllib.parse.urlparse(url).path.lower()
+    if lower_path.endswith(('.mp4', '.webm', '.m3u8', '.mp3', '.ogg', '.ogv', '.mov', '.ts', '.aac', '.wav')):
+        return url
+
+    try:
+        import yt_dlp
+        print(f"Resolving video stream for webpage: {url} using yt-dlp...")
+        ydl_opts = {
+            'format': 'best',
+            'quiet': True,
+            'no_warnings': True,
+            'skip_download': True
+        }
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+            if 'entries' in info:
+                info = info['entries'][0]
+            
+            direct_url = info.get('url')
+            if direct_url:
+                print(f"Successfully resolved webpage to direct video URL.")
+                return direct_url
+    except ImportError:
+        print("Warning: yt-dlp is not installed. Using raw URL.")
+    except Exception as e:
+        print(f"Error resolving URL with yt-dlp: {e}")
+    
+    return url
+
 # Attempt to load Flask for robust production hosting (Render, Koyeb, PythonAnywhere, etc.)
 try:
+
     from flask import Flask, request, jsonify, send_from_path, Response
     from flask_cors import CORS
     import requests
@@ -34,12 +70,15 @@ try:
         if not url:
             return jsonify({"error": "URL is required"}), 400
         
+        # Resolve webpage URL to direct stream URL
+        resolved_url = resolve_media_url(url)
+        
         current_media = {
-            "url": url,
+            "url": resolved_url,
             "timestamp": time.time(),
             "title": data.get('title', 'Cast Media')
         }
-        print(f"Casting URL via Flask: {url}")
+        print(f"Casting URL via Flask: {resolved_url[:80]}...")
         return jsonify({"success": True, "state": current_media})
 
     @app.route('/api/proxy', methods=['GET'])
@@ -202,8 +241,11 @@ except ImportError as e:
                         self.wfile.write(json.dumps({"error": "URL is required"}).encode('utf-8'))
                         return
                     
+                    # Resolve webpage URL to direct stream URL
+                    resolved_url = resolve_media_url(url)
+                    
                     current_media = {
-                        "url": url,
+                        "url": resolved_url,
                         "timestamp": time.time(),
                         "title": data.get('title', 'Cast Media')
                     }
@@ -212,7 +254,7 @@ except ImportError as e:
                     self.send_header('Content-Type', 'application/json')
                     self.end_headers()
                     self.wfile.write(json.dumps({"success": True, "state": current_media}).encode('utf-8'))
-                    print(f"Casting URL via Built-in Server: {url}")
+                    print(f"Casting URL via Built-in Server: {resolved_url[:80]}...")
                 except Exception as e:
                     self.send_response(500)
                     self.end_headers()

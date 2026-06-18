@@ -4,6 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>TV Display Receiver</title>
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@1.4.0/dist/hls.min.js"></script>
+
   <style>
     /* Premium modern dark UI */
     * {
@@ -173,12 +175,14 @@
     }
 
     // Start playing the casted media
+    var hlsInstance = null;
+
     function playMedia(url) {
       showToast('New media received! Loading...');
       
       // Determine if we should proxy the stream.
       // Many streams have CORS restrictions, so proxying through our node server helps bypass them.
-      let finalUrl = url;
+      var finalUrl = url;
       
       // If it looks like a direct media link (e.g., mp4, m3u8, webm, mp3) or needs CORS bypass,
       // we funnel it through the proxy server.
@@ -188,23 +192,64 @@
 
       console.log('Playing media source:', finalUrl);
 
+      // Clean up previous HLS instance if it exists
+      if (hlsInstance) {
+        hlsInstance.destroy();
+        hlsInstance = null;
+      }
+
       // Reset video
       video.style.display = 'block';
       idleScreen.style.display = 'none';
 
-      video.src = finalUrl;
-      video.load();
-      
-      const playPromise = video.play();
-      if (playPromise !== undefined) {
-        playPromise.then(_ => {
-          showToast('Playing stream');
-        }).catch(error => {
-          showToast('Autoplay blocked or load failed. Click TV screen to play.');
-          console.log("Playback interaction required: ", error);
-        });
+      // Check if URL is HLS stream
+      var isHLS = url.toLowerCase().indexOf('.m3u8') !== -1;
+
+      if (isHLS) {
+        if (video.canPlayType('application/vnd.apple.mpegurl')) {
+          // Native HLS support (Safari / Smart TVs / Apple TV / webOS / Tizen)
+          video.src = finalUrl;
+          video.load();
+          var playPromise = video.play();
+          if (playPromise !== undefined) {
+            playPromise.then(function() { showToast('Playing stream'); }).catch(handlePlayBlock);
+          }
+        } else if (typeof Hls !== 'undefined' && Hls.isSupported()) {
+          // Standard browser fallback using hls.js (Chrome / Firefox / Opera)
+          hlsInstance = new Hls();
+          hlsInstance.loadSource(finalUrl);
+          hlsInstance.attachMedia(video);
+          hlsInstance.on(Hls.Events.MANIFEST_PARSED, function() {
+            var playPromise = video.play();
+            if (playPromise !== undefined) {
+              playPromise.then(function() { showToast('Playing stream'); }).catch(handlePlayBlock);
+            }
+          });
+        } else {
+          // Direct fallback if no engines supported
+          video.src = finalUrl;
+          video.load();
+          var playPromise = video.play();
+          if (playPromise !== undefined) {
+            playPromise.then(function() { showToast('Playing stream'); }).catch(handlePlayBlock);
+          }
+        }
+      } else {
+        // Standard video file (mp4, webm, etc.)
+        video.src = finalUrl;
+        video.load();
+        var playPromise = video.play();
+        if (playPromise !== undefined) {
+          playPromise.then(function() { showToast('Playing stream'); }).catch(handlePlayBlock);
+        }
       }
     }
+
+    function handlePlayBlock(error) {
+      showToast('Autoplay blocked or load failed. Click TV screen to play.');
+      console.log("Playback interaction required: ", error);
+    }
+
 
     // Interactive fallback for older TVs that require user gesture to trigger video play
     document.body.addEventListener('click', () => {
