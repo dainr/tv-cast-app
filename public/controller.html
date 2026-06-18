@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TV Cast Controller</title>
+  <style>
+    /* Premium modern dark UI */
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    
+    body, html {
+      width: 100%;
+      height: 100%;
+      background-color: #0b0c10;
+      color: #c5c6c7;
+      font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 20px;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 500px;
+      background: #1f2833;
+      border-radius: 16px;
+      border: 1px solid rgba(102, 252, 241, 0.2);
+      padding: 30px 24px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+    }
+
+    h1 {
+      font-size: 1.8rem;
+      color: #ffffff;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    h1 svg {
+      width: 28px;
+      height: 28px;
+      fill: #66fcf1;
+    }
+
+    .form-group {
+      margin-bottom: 20px;
+    }
+
+    label {
+      display: block;
+      font-size: 0.9rem;
+      color: #66fcf1;
+      margin-bottom: 8px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+    }
+
+    input[type="text"] {
+      width: 100%;
+      padding: 12px 16px;
+      background-color: #0b0c10;
+      border: 1px solid #45a29e;
+      border-radius: 8px;
+      color: #ffffff;
+      font-size: 1rem;
+      outline: none;
+      transition: border-color 0.3s, box-shadow 0.3s;
+    }
+
+    input[type="text"]:focus {
+      border-color: #66fcf1;
+      box-shadow: 0 0 8px rgba(102, 252, 241, 0.4);
+    }
+
+    .btn-submit {
+      width: 100%;
+      padding: 14px;
+      background: linear-gradient(135deg, #66fcf1 0%, #45a29e 100%);
+      color: #0b0c10;
+      border: none;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: bold;
+      cursor: pointer;
+      box-shadow: 0 4px 15px rgba(102, 252, 241, 0.3);
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    .btn-submit:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(102, 252, 241, 0.5);
+    }
+
+    .btn-submit:active {
+      transform: translateY(0);
+    }
+
+    #status-bar {
+      margin-top: 20px;
+      padding: 12px;
+      border-radius: 8px;
+      background-color: #0b0c10;
+      font-size: 0.9rem;
+      font-style: italic;
+      color: #c5c6c7;
+      border-left: 4px solid #45a29e;
+      display: none;
+    }
+
+    #status-bar.success {
+      color: #66fcf1;
+      border-left-color: #66fcf1;
+    }
+
+    #status-bar.error {
+      color: #ff6b6b;
+      border-left-color: #ff6b6b;
+    }
+
+    .info-box {
+      margin-top: 25px;
+      font-size: 0.8rem;
+      color: #8f9aa6;
+      line-height: 1.4;
+      border-top: 1px solid rgba(197, 198, 199, 0.1);
+      padding-top: 15px;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <h1>
+      <svg viewBox="0 0 24 24">
+        <path d="M21 3H3c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h5v2h8v-2h5c1.1 0 1.99-.9 1.99-2L23 5c0-1.1-.9-2-2-2zm0 14H3V5h18v12zM21 6H3v10h18V6z"/>
+      </svg>
+      TV Cast Controller
+    </h1>
+
+    <div class="form-group">
+      <label for="server-address">TV Receiver Address (Optional)</label>
+      <input type="text" id="server-address" placeholder="Leave blank to use this server">
+    </div>
+
+    <div class="form-group">
+      <label for="video-url">Video or Website Link</label>
+      <input type="text" id="video-url" placeholder="Paste link (YouTube, Vimeo, website, mp4, etc.)">
+    </div>
+
+    <div class="form-group">
+      <label for="video-title">Media Title</label>
+      <input type="text" id="video-title" value="Web Cast Stream">
+    </div>
+
+    <button class="btn-submit" onclick="castMedia()">TRANSMIT & PLAY</button>
+
+    <div id="status-bar"></div>
+
+    <div class="info-box">
+      <strong>How to use:</strong> Paste any video page URL or stream URL above. The server resolves and streams the media automatically onto the TV Display receiver.
+    </div>
+  </div>
+
+  <script>
+    const statusBar = document.getElementById('status-bar');
+
+    // Automatically fill in default server URL if hosted
+    document.getElementById('server-address').value = window.location.origin;
+
+    function showStatus(message, type = '') {
+      statusBar.innerText = message;
+      statusBar.style.display = 'block';
+      statusBar.className = type;
+    }
+
+    async function castMedia() {
+      let serverAddress = document.getElementById('server-address').value.trim();
+      const videoUrl = document.getElementById('video-url').value.trim();
+      const videoTitle = document.getElementById('video-title').value.trim();
+
+      if (!videoUrl) {
+        showStatus('Error: Please paste a video or website link.', 'error');
+        return;
+      }
+
+      if (!serverAddress) {
+        serverAddress = window.location.origin;
+      }
+
+      showStatus('Connecting & resolving stream...', '');
+
+      // Ensure endpoint has standard schema
+      if (!serverAddress.startsWith('http://') && !serverAddress.startsWith('https://')) {
+        serverAddress = 'http://' + serverAddress;
+      }
+
+      const endpoint = `${serverAddress}/api/play`;
+
+      try {
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            url: videoUrl,
+            title: videoTitle
+          })
+        });
+
+        const data = await response.json();
+
+        if (response.ok && data.success) {
+          showStatus(`Success! Casted media to the receiver.`, 'success');
+          document.getElementById('video-url').value = ''; // Clear input on success
+        } else {
+          showStatus(`Error: ${data.error || 'Failed to cast media.'}`, 'error');
+        }
+      } catch (err) {
+        showStatus(`Connection failed: ${err.message}. Make sure the server URL is correct.`, 'error');
+      }
+    }
+  </script>
+</body>
+</html>
