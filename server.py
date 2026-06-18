@@ -4,6 +4,8 @@ import sys
 import time
 import urllib.request
 import urllib.parse
+import re
+
 
 PORT = int(os.environ.get("PORT", 8000))
 current_media = {
@@ -13,7 +15,24 @@ current_media = {
 }
 
 
+def strip_frame_restrictive_meta(html_text):
+    # Strip X-Frame-Options meta tags
+    html_text = re.sub(
+        r'(?i)<meta\s+[^>]*http-equiv=["\']x-frame-options["\'][^>]*>', 
+        '', 
+        html_text
+    )
+    # Strip CSP meta tags that restrict framing
+    html_text = re.sub(
+        r'(?i)<meta\s+[^>]*http-equiv=["\']content-security-policy["\'][^>]*>', 
+        '', 
+        html_text
+    )
+    return html_text
+
+
 def resolve_media_url(url):
+
     if not url:
         return url
     
@@ -114,6 +133,7 @@ try:
             content_type = r.headers.get('Content-Type', '')
             if 'text/html' in content_type:
                 html_content = r.text
+                html_content = strip_frame_restrictive_meta(html_content)
                 script_to_inject = """<script>
                 (function() {
                     try {
@@ -220,6 +240,7 @@ except ImportError as e:
                         
                         if is_html:
                             html_content = response.read().decode('utf-8', errors='ignore')
+                            html_content = strip_frame_restrictive_meta(html_content)
                             script_to_inject = """<script>
                             (function() {
                                 try {
