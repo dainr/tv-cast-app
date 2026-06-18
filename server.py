@@ -101,7 +101,11 @@ try:
             r = requests.get(target_url, headers=headers, stream=True, timeout=15)
             
             # Extract header metadata
-            excluded_headers = ['content-encoding', 'image/x-icon', 'transfer-encoding', 'connection']
+            excluded_headers = [
+                'content-encoding', 'image/x-icon', 'transfer-encoding', 
+                'connection', 'x-frame-options', 'content-security-policy'
+            ]
+
             resp_headers = [
                 (name, value) for (name, value) in r.raw.headers.items()
                 if name.lower() not in excluded_headers
