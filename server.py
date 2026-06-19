@@ -181,8 +181,14 @@ try:
     def serve_static(path):
         base_dir = os.path.dirname(os.path.abspath(__file__))
         static_dir = os.path.join(base_dir, 'public')
-        if not path or path == 'index.html':
+        
+        # Normalize path and handle aliases/redirects
+        clean_path = path.lower().strip('/')
+        if not clean_path or clean_path in ['display', 'receiver', 'index.html']:
             return send_from_path(static_dir, 'index.html')
+        elif clean_path in ['controller', 'controller.html']:
+            return send_from_path(static_dir, 'controller.html')
+            
         return send_from_path(static_dir, path)
 
 except ImportError as e:
@@ -286,11 +292,14 @@ except ImportError as e:
             # Serve static files from public relative to script path
             base_dir = os.path.dirname(os.path.abspath(__file__))
             root = os.path.join(base_dir, 'public')
-            rel_path = parsed_url.path.lstrip('/')
-            if rel_path == '' or rel_path == 'index.html':
+            
+            clean_path = parsed_url.path.lower().strip('/')
+            if not clean_path or clean_path in ['display', 'receiver', 'index.html']:
                 filepath = os.path.join(root, 'index.html')
+            elif clean_path in ['controller', 'controller.html']:
+                filepath = os.path.join(root, 'controller.html')
             else:
-                filepath = os.path.join(root, rel_path)
+                filepath = os.path.join(root, parsed_url.path.lstrip('/'))
 
             if os.path.exists(filepath) and os.path.isfile(filepath):
                 self.send_response(200)
