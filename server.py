@@ -74,7 +74,8 @@ try:
     import requests
     
     HAS_FLASK = True
-    app = Flask(__name__, static_folder='public')
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    app = Flask(__name__, static_folder=os.path.join(base_dir, 'public'))
     CORS(app)
 
     @app.route('/api/state', methods=['GET'])
@@ -178,9 +179,11 @@ try:
     @app.route('/', defaults={'path': ''})
     @app.route('/<path:path>')
     def serve_static(path):
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        static_dir = os.path.join(base_dir, 'public')
         if not path or path == 'index.html':
-            return send_from_path('public', 'index.html')
-        return send_from_path('public', path)
+            return send_from_path(static_dir, 'index.html')
+        return send_from_path(static_dir, path)
 
 except ImportError as e:
     # Fallback to standard HTTP library if Flask is not installed (no dependencies required for local run)
@@ -280,13 +283,9 @@ except ImportError as e:
                     self.wfile.write(f"Proxy error: {str(e)}".encode('utf-8'))
                 return
 
-            # Serve static files from public
-            if parsed_url.path == '/' or parsed_url.path == '/index.html':
-                self.path = '/public/index.html'
-            else:
-                self.path = '/public' + parsed_url.path
-
-            root = os.path.join(os.getcwd(), 'public')
+            # Serve static files from public relative to script path
+            base_dir = os.path.dirname(os.path.abspath(__file__))
+            root = os.path.join(base_dir, 'public')
             rel_path = parsed_url.path.lstrip('/')
             if rel_path == '' or rel_path == 'index.html':
                 filepath = os.path.join(root, 'index.html')
