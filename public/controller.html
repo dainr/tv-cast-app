@@ -102,6 +102,54 @@
       transform: translateY(0);
     }
 
+    .btn-container {
+      display: flex;
+      gap: 12px;
+      margin-top: 10px;
+    }
+
+    .btn-skip {
+      background: #1f2833;
+      color: #66fcf1;
+      border: 1px solid #45a29e;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: bold;
+      cursor: pointer;
+      transition: background 0.2s, color 0.2s, transform 0.2s, box-shadow 0.2s;
+    }
+
+    .btn-skip:hover {
+      background: #45a29e;
+      color: #0b0c10;
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(102, 252, 241, 0.2);
+    }
+
+    .btn-skip:active {
+      transform: translateY(0);
+    }
+
+    .checkbox-group {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+
+    .checkbox-group input[type="checkbox"] {
+      width: 18px;
+      height: 18px;
+      cursor: pointer;
+      accent-color: #66fcf1;
+    }
+
+    .checkbox-group label {
+      margin-bottom: 0;
+      cursor: pointer;
+      font-size: 0.95rem;
+    }
+
     #status-bar {
       margin-top: 20px;
       padding: 12px;
@@ -159,7 +207,15 @@
       <input type="text" id="video-title" value="Web Cast Stream">
     </div>
 
-    <button class="btn-submit" onclick="castMedia()">TRANSMIT & PLAY</button>
+    <div class="checkbox-group">
+      <input type="checkbox" id="force-play">
+      <label for="force-play">Force Play Immediately (skip queue)</label>
+    </div>
+
+    <div class="btn-container">
+      <button class="btn-submit" onclick="castMedia()" style="flex: 2;">TRANSMIT & PLAY</button>
+      <button class="btn-skip" onclick="skipMedia()" style="flex: 1;">SKIP ➔</button>
+    </div>
 
     <div id="status-bar"></div>
 
@@ -184,6 +240,7 @@
       let serverAddress = document.getElementById('server-address').value.trim();
       const videoUrl = document.getElementById('video-url').value.trim();
       const videoTitle = document.getElementById('video-title').value.trim();
+      const forcePlay = document.getElementById('force-play').checked;
 
       if (!videoUrl) {
         showStatus('Error: Please paste a video or website link.', 'error');
@@ -211,7 +268,8 @@
           },
           body: JSON.stringify({
             url: videoUrl,
-            title: videoTitle
+            title: videoTitle,
+            force: forcePlay
           })
         });
 
@@ -225,6 +283,38 @@
         }
       } catch (err) {
         showStatus(`Connection failed: ${err.message}. Make sure the server URL is correct.`, 'error');
+      }
+    }
+
+    async function skipMedia() {
+      let serverAddress = document.getElementById('server-address').value.trim();
+      if (!serverAddress) {
+        serverAddress = window.location.origin;
+      }
+
+      if (!serverAddress.startsWith('http://') && !serverAddress.startsWith('https://')) {
+        serverAddress = 'http://' + serverAddress;
+      }
+
+      showStatus('Skipping to next media...', '');
+
+      try {
+        const response = await fetch(`${serverAddress}/api/next`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        });
+
+        const data = await response.json();
+
+        if (response.ok && data.success) {
+          showStatus(`Skipped to next video!`, 'success');
+        } else {
+          showStatus(`Error: ${data.error || 'Failed to skip.'}`, 'error');
+        }
+      } catch (err) {
+        showStatus(`Connection failed: ${err.message}.`, 'error');
       }
     }
   </script>

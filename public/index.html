@@ -117,11 +117,208 @@
       50% { transform: scale(1.05); box-shadow: 0 0 30px rgba(102, 252, 241, 0.6); }
       100% { transform: scale(0.95); box-shadow: 0 0 15px rgba(102, 252, 241, 0.3); }
     }
+
+    /* Sidebar and Queue UI */
+    #menu-btn {
+      position: absolute;
+      top: 25px;
+      left: 25px;
+      background: rgba(31, 40, 51, 0.8);
+      border: 1px solid rgba(102, 252, 241, 0.4);
+      color: #66fcf1;
+      padding: 12px;
+      border-radius: 50%;
+      cursor: pointer;
+      z-index: 200;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.3s, transform 0.2s;
+    }
+
+    #menu-btn:hover {
+      background: #1f2833;
+      transform: scale(1.1);
+      box-shadow: 0 0 12px rgba(102, 252, 241, 0.6);
+    }
+
+    #menu-btn svg {
+      width: 24px;
+      height: 24px;
+      fill: #66fcf1;
+    }
+
+    #queue-sidebar {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 340px;
+      height: 100%;
+      background: rgba(11, 12, 16, 0.95);
+      border-right: 1px solid rgba(102, 252, 241, 0.2);
+      z-index: 190;
+      padding: 90px 20px 20px 20px;
+      display: flex;
+      flex-direction: column;
+      transform: translateX(-100%);
+      transition: transform 0.3s cubic-bezier(0.1, 0.9, 0.2, 1);
+      box-shadow: 5px 0 25px rgba(0, 0, 0, 0.5);
+      backdrop-filter: blur(10px);
+    }
+
+    #queue-sidebar.open {
+      transform: translateX(0);
+    }
+
+    .sidebar-header {
+      font-size: 1.3rem;
+      font-weight: bold;
+      color: #ffffff;
+      margin-bottom: 20px;
+      border-bottom: 1px solid rgba(102, 252, 241, 0.2);
+      padding-bottom: 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .sidebar-header span {
+      color: #66fcf1;
+      font-size: 0.85rem;
+    }
+
+    #queue-list {
+      flex-grow: 1;
+      overflow-y: auto;
+      list-style: none;
+      padding-right: 5px;
+    }
+
+    /* Scrollbar */
+    #queue-list::-webkit-scrollbar {
+      width: 5px;
+    }
+    #queue-list::-webkit-scrollbar-track {
+      background: rgba(0, 0, 0, 0.1);
+    }
+    #queue-list::-webkit-scrollbar-thumb {
+      background: #45a29e;
+      border-radius: 5px;
+    }
+
+    .queue-item {
+      background: rgba(31, 40, 51, 0.5);
+      border: 1px solid rgba(197, 198, 199, 0.1);
+      padding: 12px;
+      border-radius: 8px;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      transition: background 0.2s, border-color 0.2s;
+    }
+
+    .queue-item:hover {
+      background: rgba(31, 40, 51, 0.9);
+      border-color: rgba(102, 252, 241, 0.3);
+    }
+
+    .queue-item-title {
+      font-size: 0.9rem;
+      color: #c5c6c7;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 170px;
+    }
+
+    .queue-item-actions {
+      display: flex;
+      gap: 6px;
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+
+    .queue-item:hover .queue-item-actions {
+      opacity: 1;
+    }
+
+    .action-btn {
+      background: none;
+      border: none;
+      color: #8f9aa6;
+      cursor: pointer;
+      font-size: 1rem;
+      padding: 2px 4px;
+      border-radius: 4px;
+      transition: color 0.2s, background 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .action-btn:hover {
+      color: #66fcf1;
+      background: rgba(102, 252, 241, 0.1);
+    }
+
+    .action-btn.delete:hover {
+      color: #ff6b6b;
+      background: rgba(255, 107, 107, 0.1);
+    }
+
+    /* Skip button at bottom of sidebar */
+    .skip-btn {
+      margin-top: 15px;
+      padding: 12px;
+      background: #45a29e;
+      color: #0b0c10;
+      border: none;
+      border-radius: 8px;
+      font-weight: bold;
+      cursor: pointer;
+      transition: background 0.2s, transform 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .skip-btn:hover {
+      background: #66fcf1;
+      transform: translateY(-1px);
+    }
+
+    .queue-item.drag-over {
+      border: 1px dashed #66fcf1;
+      background: rgba(102, 252, 241, 0.15) !important;
+    }
   </style>
 </head>
 <body>
 
   <div id="display-container">
+    <!-- Menu Button (Top Left Hamburger) -->
+    <button id="menu-btn" onclick="toggleSidebar()" title="Toggle Playlist Queue">
+      <svg viewBox="0 0 24 24">
+        <path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/>
+      </svg>
+    </button>
+
+    <!-- Queue Sidebar -->
+    <div id="queue-sidebar">
+      <div class="sidebar-header">
+        Play Queue <span id="queue-count">0/15</span>
+      </div>
+      <ul id="queue-list">
+        <!-- Rendered dynamically -->
+      </ul>
+      <button class="skip-btn" id="skip-button" onclick="skipToNext()">
+        Skip to Next ➔
+      </button>
+    </div>
+
     <video id="video-player" controls autoplay muted playsinline name="media"></video>
     <iframe id="web-frame" style="position:absolute; top:0; left:0; width:100%; height:100%; border:none; display:none; background:#000;" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>
 
@@ -137,14 +334,19 @@
     </div>
 
     <div id="toast">Casting stream...</div>
-  </div>
-
-  <script>
+  </div>  <script>
     const video = document.getElementById('video-player');
     const webFrame = document.getElementById('web-frame');
     const idleScreen = document.getElementById('idle-screen');
     const toast = document.getElementById('toast');
     const serverUrlDisplay = document.getElementById('server-url');
+    
+    // Sidebar DOM elements
+    const sidebar = document.getElementById('queue-sidebar');
+    const queueList = document.getElementById('queue-list');
+    const queueCount = document.getElementById('queue-count');
+    
+    var localQueue = [];
 
     // Display the current URL
     serverUrlDisplay.innerText = "Host IP / Server: " + window.location.host;
@@ -167,12 +369,229 @@
         if (!response.ok) return;
         
         const data = await response.json();
+        
+        // Render updated queue
+        renderQueue(data.queue);
+        
         if (data.url && data.timestamp > lastTimestamp) {
           lastTimestamp = data.timestamp;
           playMedia(data.url);
         }
       } catch (err) {
         console.error('Error checking state:', err);
+      }
+    }
+
+    // Sidebar interaction functions
+    function toggleSidebar() {
+      sidebar.classList.toggle('open');
+    }
+
+    async function skipToNext() {
+      try {
+        showToast("Loading next video...");
+        const response = await fetch('/api/next', { method: 'POST' });
+        const data = await response.json();
+        if (data.success) {
+          lastTimestamp = data.state.timestamp;
+          if (data.state.url) {
+            playMedia(data.state.url);
+          } else {
+            resetToIdle();
+          }
+        }
+      } catch (err) {
+        console.error("Failed to skip to next:", err);
+      }
+    }
+
+    function resetToIdle() {
+      if (hlsInstance) {
+        hlsInstance.destroy();
+        hlsInstance = null;
+      }
+      video.style.display = 'none';
+      webFrame.style.display = 'none';
+      webFrame.src = 'about:blank';
+      video.src = '';
+      idleScreen.style.display = 'flex';
+      showToast("Queue finished. Idle.");
+    }
+
+    async function deleteQueueItem(itemId) {
+      try {
+        const response = await fetch('/api/queue/delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: itemId })
+        });
+        const data = await response.json();
+        if (data.success) {
+          renderQueue(data.state.queue);
+        }
+      } catch (err) {
+        console.error("Failed to delete queue item:", err);
+      }
+    }
+
+    async function sendReorder(ids) {
+      try {
+        const response = await fetch('/api/queue/reorder', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ids: ids })
+        });
+        const data = await response.json();
+        if (data.success) {
+          renderQueue(data.state.queue);
+        }
+      } catch (err) {
+        console.error("Failed to reorder queue:", err);
+      }
+    }
+
+    async function moveQueueItem(index, direction) {
+      var targetIndex = index + direction;
+      if (targetIndex < 0 || targetIndex >= localQueue.length) return;
+      
+      // Swap elements locally for immediate response
+      var temp = localQueue[index];
+      localQueue[index] = localQueue[targetIndex];
+      localQueue[targetIndex] = temp;
+      
+      var ids = localQueue.map(function(item) { return item.id; });
+      await sendReorder(ids);
+    }
+
+    function renderQueue(queue) {
+      localQueue = queue || [];
+      queueCount.innerText = localQueue.length + "/15";
+      queueList.innerHTML = "";
+      
+      if (localQueue.length === 0) {
+        queueList.innerHTML = '<li style="text-align:center; padding: 25px; color:#8f9aa6; font-style:italic; font-size:0.9rem;">Queue is empty</li>';
+        return;
+      }
+      
+      localQueue.forEach(function(item, index) {
+        const li = document.createElement('li');
+        li.className = 'queue-item';
+        
+        // Drag and drop event listeners
+        li.draggable = true;
+        
+        li.ondragstart = function(e) {
+          e.dataTransfer.setData('text/plain', index);
+          li.style.opacity = '0.4';
+        };
+        
+        li.ondragend = function(e) {
+          li.style.opacity = '1';
+          var items = queueList.querySelectorAll('.queue-item');
+          for (var i = 0; i < items.length; i++) {
+            items[i].classList.remove('drag-over');
+          }
+        };
+        
+        li.ondragover = function(e) {
+          e.preventDefault();
+          li.classList.add('drag-over');
+        };
+        
+        li.ondragleave = function(e) {
+          li.classList.remove('drag-over');
+        };
+        
+        li.ondrop = function(e) {
+          e.preventDefault();
+          li.classList.remove('drag-over');
+          var fromIndex = parseInt(e.dataTransfer.getData('text/plain'), 10);
+          if (isNaN(fromIndex) || fromIndex === index) return;
+          
+          var movedItem = localQueue.splice(fromIndex, 1)[0];
+          localQueue.splice(index, 0, movedItem);
+          
+          var ids = localQueue.map(function(item) { return item.id; });
+          sendReorder(ids);
+        };
+        
+        const titleDiv = document.createElement('div');
+        titleDiv.className = 'queue-item-title';
+        titleDiv.innerText = (index + 1) + ". " + (item.title || 'Cast Video');
+        titleDiv.title = item.title;
+        li.appendChild(titleDiv);
+        
+        const actionsDiv = document.createElement('div');
+        actionsDiv.className = 'queue-item-actions';
+        
+        // Move Up Button
+        if (index > 0) {
+          const upBtn = document.createElement('button');
+          upBtn.className = 'action-btn';
+          upBtn.innerHTML = '▲';
+          upBtn.title = "Move Up";
+          upBtn.onclick = function(e) {
+            e.stopPropagation();
+            moveQueueItem(index, -1);
+          };
+          actionsDiv.appendChild(upBtn);
+        }
+        
+        // Move Down Button
+        if (index < localQueue.length - 1) {
+          const downBtn = document.createElement('button');
+          downBtn.className = 'action-btn';
+          downBtn.innerHTML = '▼';
+          downBtn.title = "Move Down";
+          downBtn.onclick = function(e) {
+            e.stopPropagation();
+            moveQueueItem(index, 1);
+          };
+          actionsDiv.appendChild(downBtn);
+        }
+        
+        // Delete Button
+        const delBtn = document.createElement('button');
+        delBtn.className = 'action-btn delete';
+        delBtn.innerHTML = '🗑️';
+        delBtn.title = "Delete";
+        delBtn.onclick = function(e) {
+          e.stopPropagation();
+          deleteQueueItem(item.id);
+        };
+        actionsDiv.appendChild(delBtn);
+        
+        li.appendChild(actionsDiv);
+        li.onclick = function(e) {
+          // Double-click or click item to force play it immediately
+          e.stopPropagation();
+          if (confirm("Play this item immediately?")) {
+            playMediaImmediately(item);
+          }
+        };
+        
+        queueList.appendChild(li);
+      });
+    }
+
+    async function playMediaImmediately(item) {
+      try {
+        const response = await fetch('/api/play', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            url: item.url,
+            title: item.title,
+            force: true // Force overwrite active video
+          })
+        });
+        const data = await response.json();
+        if (data.success) {
+          // Remove from queue
+          deleteQueueItem(item.id);
+        }
+      } catch (err) {
+        console.error("Failed to play enqueued item:", err);
       }
     }
 
@@ -234,7 +653,6 @@
       video.style.display = 'block';
       idleScreen.style.display = 'none';
 
-
       // Check if URL is HLS stream
       var isHLS = url.toLowerCase().indexOf('.m3u8') !== -1;
 
@@ -291,11 +709,18 @@
       }, 300);
     };
 
-
-
+    // Auto play next video in queue when current video ends
+    video.onended = function() {
+      console.log("Video finished. Transitioning to next queued item...");
+      skipToNext();
+    };
 
     // Interactive fallback for older TVs that require user gesture to trigger video play
-    document.body.addEventListener('click', () => {
+    document.body.addEventListener('click', (e) => {
+      // Don't trigger play/unmute if clicking inside the sidebar menu
+      if (sidebar.contains(e.target) || document.getElementById('menu-btn').contains(e.target)) {
+        return;
+      }
       if (video.src) {
         video.muted = false;
         video.play();

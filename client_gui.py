@@ -63,7 +63,22 @@ class TVCastClient:
         title_opt_label.pack(anchor="w")
         self.title_var = tk.StringVar(value="Stream Clip")
         self.title_entry = tk.Entry(cast_card, textvariable=self.title_var, bg=self.black, fg=self.white, insertbackground=self.white, bd=1, relief="solid", font=("Helvetica", 10))
-        self.title_entry.pack(fill=tk.X, pady=(5, 15))
+        self.title_entry.pack(fill=tk.X, pady=(5, 10))
+
+        # Force Play Checkbox
+        self.force_var = tk.BooleanVar(value=False)
+        self.force_check = tk.Checkbutton(
+            cast_card,
+            text="Force Play Immediately (skip queue)",
+            variable=self.force_var,
+            bg=self.card_color,
+            fg=self.text_color,
+            selectcolor=self.black,
+            activebackground=self.card_color,
+            activeforeground=self.text_color,
+            font=("Helvetica", 10)
+        )
+        self.force_check.pack(anchor="w", pady=(0, 15))
 
         # Action Buttons Frame
         btn_frame = tk.Frame(cast_card, bg=self.card_color)
@@ -85,6 +100,23 @@ class TVCastClient:
         )
         self.play_btn.configure(command=self.send_play_command)
         self.play_btn.pack(side=tk.LEFT, padx=(0, 10))
+
+        self.skip_btn = tk.Button(
+            btn_frame, 
+            text="SKIP", 
+            bg="#3a4f50", 
+            fg=self.white, 
+            activebackground="#45a29e", 
+            activeforeground=self.bg_color,
+            font=("Helvetica", 10, "bold"), 
+            bd=0, 
+            relief="flat",
+            padx=15,
+            pady=6,
+            cursor="hand2"
+        )
+        self.skip_btn.configure(command=self.send_skip_command)
+        self.skip_btn.pack(side=tk.LEFT, padx=(0, 10))
         
         self.clear_btn = tk.Button(
             btn_frame, 
@@ -171,7 +203,8 @@ class TVCastClient:
         # Prepare payload
         payload = {
             "url": resolved_url,
-            "title": media_title
+            "title": media_title,
+            "force": self.force_var.get()
         }
         
         # Always format standard base URL properly
@@ -201,6 +234,33 @@ class TVCastClient:
         except Exception as e:
             self.update_status(f"Connection failed: {str(e)}", is_error=True)
             messagebox.showerror("Connection Error", f"Unable to reach the TV Display Server at:\n{endpoint}\n\nMake sure the receiver server is running and the address is correct.")
+
+    def send_skip_command(self):
+        server_ip = self.server_ip_var.get().strip()
+        if not server_ip:
+            messagebox.showerror("Validation Error", "Please provide a valid TV Receiver Server Address.")
+            return
+
+        if not server_ip.startswith("http://") and not server_ip.startswith("https://"):
+            server_ip = "http://" + server_ip
+
+        endpoint = f"{server_ip}/api/next"
+        self.update_status("Sending skip command...")
+        
+        try:
+            req = urllib.request.Request(
+                endpoint,
+                data=b"",
+                headers={'Content-Type': 'application/json'}
+            )
+            with urllib.request.urlopen(req, timeout=5) as response:
+                res_data = json.loads(response.read().decode('utf-8'))
+                if res_data.get('success'):
+                    self.update_status("Skipped to next queue item!")
+                else:
+                    self.update_status(f"Server response error: {res_data.get('error')}", is_error=True)
+        except Exception as e:
+            self.update_status(f"Skip failed: {str(e)}", is_error=True)
 
 if __name__ == "__main__":
     root = tk.Tk()

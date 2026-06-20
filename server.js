@@ -15,6 +15,7 @@ let currentMedia = {
   timestamp: Date.now(),
   title: 'No media playing'
 };
+let mediaQueue = [];
 
 // Log requests
 app.use((req, res, next) => {
@@ -24,24 +25,91 @@ app.use((req, res, next) => {
 
 // TV polling endpoint (highly compatible with older TV browsers)
 app.get('/api/state', (req, res) => {
-  res.json(currentMedia);
+  res.json({ ...currentMedia, queue: mediaQueue });
 });
 
 // Client endpoint to play a link
 app.post('/api/play', (req, res) => {
-  const { url, title } = req.body;
+  const { url, title, force } = req.body;
   if (!url) {
     return res.status(400).json({ error: 'URL is required' });
   }
 
-  currentMedia = {
+  const item = {
+    id: Date.now(),
     url: url,
-    timestamp: Date.now(),
-    title: title || 'Cast Media'
+    title: title || 'Cast Media',
+    timestamp: Date.now()
   };
 
-  console.log(`Now playing: ${url}`);
-  res.json({ success: true, state: currentMedia });
+  if (!currentMedia.url || force) {
+    currentMedia = item;
+    console.log(`Now playing: ${url}`);
+  } else {
+    if (mediaQueue.length >= 15) {
+      return res.status(400).json({ error: 'Queue is full (max 15 items)' });
+    }
+    mediaQueue.push(item);
+    console.log(`Added to queue: ${url}`);
+  }
+
+  res.json({ success: true, state: { ...currentMedia, queue: mediaQueue } });
+});
+
+app.post('/api/next', (req, res) => {
+  if (mediaQueue.length > 0) {
+    currentMedia = mediaQueue.shift();
+    currentMedia.timestamp = Date.now();
+    console.log(`Playing next video from queue: ${currentMedia.title}`);
+  } else {
+    currentMedia = {
+      url: '',
+      timestamp: Date.now(),
+      title: 'No media playing'
+    };
+    console.log("Queue is empty, stopping playback.");
+  }
+  res.json({ success: true, state: { ...currentMedia, queue: mediaQueue } });
+});
+
+app.post('/api/queue/delete', (req, res) => {
+  const { id } = req.body;
+  if (id === undefined) {
+    return res.status(400).json({ error: 'Item ID is required' });
+  }
+  mediaQueue = mediaQueue.filter(item => item.id !== parseInt(id, 10));
+  console.log(`Deleted item ${id} from queue.`);
+  res.json({ success: true, state: { ...currentMedia, queue: mediaQueue } });
+});
+
+app.post('/api/queue/reorder', (req, res) => {
+  const { ids } = req.body;
+  if (!Array.isArray(ids)) {
+    return res.status(400).json({ error: 'List of IDs is required' });
+  }
+
+  const idToItem = {};
+  mediaQueue.forEach(item => {
+    idToItem[item.id] = item;
+  });
+
+  const newQueue = [];
+  ids.forEach(iid => {
+    const iidInt = parseInt(iid, 10);
+    if (idToItem[iidInt]) {
+      newQueue.push(idToItem[iidInt]);
+    }
+  });
+
+  mediaQueue.forEach(item => {
+    if (!newQueue.some(x => x.id === item.id)) {
+      newQueue.push(item);
+    }
+  });
+
+  mediaQueue = newQueue.slice(0, 15);
+  console.log("Reordered queue.");
+  res.json({ success: true, state: { ...currentMedia, queue: mediaQueue } });
 });
 
 // A media proxy to bypass CORS / Mixed Content issues in TV browsers.

@@ -13,6 +13,7 @@ current_media = {
     "timestamp": 0.0,
     "title": "No media playing"
 }
+media_queue = []
 
 
 def strip_frame_restrictive_meta(html_text):
@@ -80,11 +81,13 @@ try:
 
     @app.route('/api/state', methods=['GET'])
     def get_state():
-        return jsonify(current_media)
+        state = current_media.copy()
+        state["queue"] = media_queue
+        return jsonify(state)
 
     @app.route('/api/play', methods=['POST'])
     def play_media():
-        global current_media
+        global current_media, media_queue
         data = request.get_json() or {}
         url = data.get('url')
         if not url:
@@ -93,13 +96,90 @@ try:
         # Resolve webpage URL to direct stream URL
         resolved_url = resolve_media_url(url)
         
-        current_media = {
+        item = {
+            "id": int(time.time() * 1000),
             "url": resolved_url,
-            "timestamp": time.time(),
-            "title": data.get('title', 'Cast Media')
+            "title": data.get('title', 'Cast Media'),
+            "timestamp": time.time()
         }
-        print(f"Casting URL via Flask: {resolved_url[:80]}...")
-        return jsonify({"success": True, "state": current_media})
+        
+        force_play = data.get('force', False)
+        
+        if not current_media.get("url") or force_play:
+            current_media = item
+            print(f"Casting URL immediately via Flask: {resolved_url[:80]}...")
+        else:
+            if len(media_queue) >= 15:
+                return jsonify({"error": "Queue is full (max 15 items)"}), 400
+            media_queue.append(item)
+            print(f"Added URL to queue via Flask: {resolved_url[:80]}...")
+            
+        state = current_media.copy()
+        state["queue"] = media_queue
+        return jsonify({"success": True, "state": state})
+
+    @app.route('/api/next', methods=['POST'])
+    def play_next():
+        global current_media, media_queue
+        if media_queue:
+            current_media = media_queue.pop(0)
+            current_media["timestamp"] = time.time()
+            print(f"Playing next video from queue: {current_media['title']}")
+        else:
+            current_media = {
+                "url": "",
+                "timestamp": time.time(),
+                "title": "No media playing"
+            }
+            print("Queue is empty, stopping playback.")
+            
+        state = current_media.copy()
+        state["queue"] = media_queue
+        return jsonify({"success": True, "state": state})
+
+    @app.route('/api/queue/delete', methods=['POST'])
+    def queue_delete():
+        global media_queue
+        data = request.get_json() or {}
+        item_id = data.get('id')
+        if item_id is None:
+            return jsonify({"error": "Item ID is required"}), 400
+            
+        media_queue = [item for item in media_queue if item["id"] != int(item_id)]
+        print(f"Deleted item {item_id} from queue.")
+        
+        state = current_media.copy()
+        state["queue"] = media_queue
+        return jsonify({"success": True, "state": state})
+
+    @app.route('/api/queue/reorder', methods=['POST'])
+    def queue_reorder():
+        global media_queue
+        data = request.get_json() or {}
+        item_ids = data.get('ids')
+        if not isinstance(item_ids, list):
+            return jsonify({"error": "List of IDs is required"}), 400
+            
+        id_to_item = {item["id"]: item for item in media_queue}
+        new_queue = []
+        for iid in item_ids:
+            try:
+                iid_int = int(iid)
+                if iid_int in id_to_item:
+                    new_queue.append(id_to_item[iid_int])
+            except ValueError:
+                continue
+                
+        for item in media_queue:
+            if item["id"] not in [x["id"] for x in new_queue]:
+                new_queue.append(item)
+                
+        media_queue = new_queue[:15]
+        print("Reordered queue.")
+        
+        state = current_media.copy()
+        state["queue"] = media_queue
+        return jsonify({"success": True, "state": state})
 
     @app.route('/api/proxy', methods=['GET'])
     def media_proxy():
@@ -318,39 +398,104 @@ except ImportError as e:
                 self.wfile.write(b"File not found")
 
         def do_POST(self):
-            global current_media
+            global current_media, media_queue
             parsed_url = urllib.parse.urlparse(self.path)
             
+            content_length = int(self.headers.get('Content-Length', 0))
+            post_data = self.rfile.read(content_length) if content_length > 0 else b""
+            
+            try:
+                data = json.loads(post_data.decode('utf-8')) if post_data else {}
+            except Exception:
+                data = {}
+
             if parsed_url.path == '/api/play':
-                content_length = int(self.headers['Content-Length'])
-                post_data = self.rfile.read(content_length)
-                try:
-                    data = json.loads(post_data.decode('utf-8'))
-                    url = data.get('url')
-                    if not url:
+                url = data.get('url')
+                if not url:
+                    self.send_response(400)
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"error": "URL is required"}).encode('utf-8'))
+                    return
+                
+                resolved_url = resolve_media_url(url)
+                item = {
+                    "id": int(time.time() * 1000),
+                    "url": resolved_url,
+                    "title": data.get('title', 'Cast Media'),
+                    "timestamp": time.time()
+                }
+                
+                force_play = data.get('force', False)
+                if not current_media.get("url") or force_play:
+                    current_media = item
+                else:
+                    if len(media_queue) >= 15:
                         self.send_response(400)
                         self.end_headers()
-                        self.wfile.write(json.dumps({"error": "URL is required"}).encode('utf-8'))
+                        self.wfile.write(json.dumps({"error": "Queue is full"}).encode('utf-8'))
                         return
-                    
-                    # Resolve webpage URL to direct stream URL
-                    resolved_url = resolve_media_url(url)
-                    
+                    media_queue.append(item)
+                
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                state = current_media.copy()
+                state["queue"] = media_queue
+                self.wfile.write(json.dumps({"success": True, "state": state}).encode('utf-8'))
+                print(f"Casting URL via Built-in Server: {resolved_url[:80]}...")
+                return
+                
+            elif parsed_url.path == '/api/next':
+                if media_queue:
+                    current_media = media_queue.pop(0)
+                    current_media["timestamp"] = time.time()
+                else:
                     current_media = {
-                        "url": resolved_url,
+                        "url": "",
                         "timestamp": time.time(),
-                        "title": data.get('title', 'Cast Media')
+                        "title": "No media playing"
                     }
-                    
-                    self.send_response(200)
-                    self.send_header('Content-Type', 'application/json')
-                    self.end_headers()
-                    self.wfile.write(json.dumps({"success": True, "state": current_media}).encode('utf-8'))
-                    print(f"Casting URL via Built-in Server: {resolved_url[:80]}...")
-                except Exception as e:
-                    self.send_response(500)
-                    self.end_headers()
-                    self.wfile.write(json.dumps({"error": str(e)}).encode('utf-8'))
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                state = current_media.copy()
+                state["queue"] = media_queue
+                self.wfile.write(json.dumps({"success": True, "state": state}).encode('utf-8'))
+                return
+
+            elif parsed_url.path == '/api/queue/delete':
+                item_id = data.get('id')
+                if item_id is not None:
+                    media_queue = [item for item in media_queue if item["id"] != int(item_id)]
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                state = current_media.copy()
+                state["queue"] = media_queue
+                self.wfile.write(json.dumps({"success": True, "state": state}).encode('utf-8'))
+                return
+
+            elif parsed_url.path == '/api/queue/reorder':
+                item_ids = data.get('ids', [])
+                id_to_item = {item["id"]: item for item in media_queue}
+                new_queue = []
+                for iid in item_ids:
+                    try:
+                        iid_int = int(iid)
+                        if iid_int in id_to_item:
+                            new_queue.append(id_to_item[iid_int])
+                    except ValueError:
+                        continue
+                for item in media_queue:
+                    if item["id"] not in [x["id"] for x in new_queue]:
+                        new_queue.append(item)
+                media_queue = new_queue[:15]
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                state = current_media.copy()
+                state["queue"] = media_queue
+                self.wfile.write(json.dumps({"success": True, "state": state}).encode('utf-8'))
                 return
             
             self.send_response(404)
