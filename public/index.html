@@ -330,7 +330,10 @@
       </div>
       <h1>TV CAST RECEIVER</h1>
       <p id="server-url">Waiting for connection...</p>
-      <div class="instructions">Open the desktop client controller to start playing streams</div>
+      <div class="instructions">
+        Open the controller on a mobile phone or tablet to start casting:<br>
+        <span style="color: #66fcf1; font-weight: bold; font-size: 1.15rem; margin-top: 8px; display: inline-block; word-break: break-all;" id="controller-link"></span>
+      </div>
     </div>
 
     <div id="toast">Casting stream...</div>
@@ -350,6 +353,10 @@
 
     // Display the current URL
     serverUrlDisplay.innerText = "Host IP / Server: " + window.location.host;
+
+    // Set the controller link
+    var origin = window.location.origin || (window.location.protocol + "//" + window.location.host);
+    document.getElementById('controller-link').innerText = origin + "/controller";
 
     let lastTimestamp = 0;
 
