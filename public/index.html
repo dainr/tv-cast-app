@@ -631,6 +631,31 @@
       }
     };
 
+    function getYouTubeId(url) {
+      if (!url) return null;
+      var regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=|shorts\/)([^#\&\?]*).*/;
+      var match = url.match(regExp);
+      return (match && match[2].length === 11) ? match[2] : null;
+    }
+
+    function getVimeoId(url) {
+      if (!url) return null;
+      var regExp = /vimeo\.com\/(?:channels\/(?:\w+\/)?|groups\/([^\/]*)\/videos\/|album\/(\d+)\/video\/|video\/|)(\d+)(?:$|\/|\?)/;
+      var match = url.match(regExp);
+      return match ? match[3] : null;
+    }
+
+    function cleanupPlayers() {
+      if (hlsInstance) {
+        hlsInstance.destroy();
+        hlsInstance = null;
+      }
+      try {
+        video.pause();
+      } catch (e) {}
+      video.src = '';
+    }
+
     function playMedia(url) {
       playMediaWithConfig(url, false);
     }
@@ -638,6 +663,30 @@
     function playMediaWithConfig(url, useProxy) {
       currentRawUrl = url;
       isProxyActive = useProxy;
+
+      // Extract YouTube / Vimeo IDs
+      var ytId = getYouTubeId(url);
+      var vimId = getVimeoId(url);
+
+      if (ytId) {
+        showToast('Playing YouTube Video...');
+        cleanupPlayers();
+        video.style.display = 'none';
+        webFrame.style.display = 'block';
+        idleScreen.style.display = 'none';
+        webFrame.src = 'https://www.youtube.com/embed/' + ytId + '?autoplay=1&enablejsapi=1';
+        return;
+      }
+
+      if (vimId) {
+        showToast('Playing Vimeo Video...');
+        cleanupPlayers();
+        video.style.display = 'none';
+        webFrame.style.display = 'block';
+        idleScreen.style.display = 'none';
+        webFrame.src = 'https://player.vimeo.com/video/' + vimId + '?autoplay=1&api=1';
+        return;
+      }
 
       showToast(useProxy ? 'Loading via proxy...' : 'New media received! Loading...');
       
@@ -648,13 +697,9 @@
 
       console.log('Playing media source (useProxy=' + useProxy + '):', finalUrl);
 
-      // Clean up previous HLS instance if it exists
-      if (hlsInstance) {
-        hlsInstance.destroy();
-        hlsInstance = null;
-      }
+      cleanupPlayers();
 
-      // Reset widgets
+      // Reset widgets for standard video playback
       webFrame.style.display = 'none';
       webFrame.src = 'about:blank';
       video.style.display = 'block';
@@ -732,6 +777,27 @@
         video.muted = false;
         video.play();
         showToast('Playback started with audio');
+      }
+    });
+
+    // Listen to iframe postMessage events (e.g. YouTube and Vimeo state changes)
+    window.addEventListener('message', function(event) {
+      try {
+        var data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+        if (data) {
+          // YouTube autoplay check / end state
+          if (data.event === 'onStateChange' && data.info === 0) {
+            console.log("YouTube video ended. Transitioning to next queued item...");
+            skipToNext();
+          }
+          // Vimeo finish state
+          if (data.event === 'ended' || data.event === 'finish') {
+            console.log("Vimeo video ended. Transitioning to next queued item...");
+            skipToNext();
+          }
+        }
+      } catch (err) {
+        // Ignore non-JSON postMessage payloads
       }
     });
 
