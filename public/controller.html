@@ -238,6 +238,28 @@
     }
 
     function makeRequest(method, url, data, callback) {
+      if (typeof fetch === 'function' && typeof Promise === 'function') {
+        var options = {
+          method: method,
+          headers: method === 'POST' ? { 'Content-Type': 'application/json' } : {}
+        };
+        if (data) {
+          options.body = JSON.stringify(data);
+        }
+        fetch(url, options)
+          .then(function(res) {
+            if (!res.ok) throw new Error("HTTP error " + res.status);
+            return res.json().catch(function() { return res.text(); });
+          })
+          .then(function(json) {
+            callback(null, json);
+          })
+          .catch(function(err) {
+            callback(err, null);
+          });
+        return;
+      }
+
       var xhr = new XMLHttpRequest();
       xhr.open(method, url, true);
       if (method === 'POST') {
