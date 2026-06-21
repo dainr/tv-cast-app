@@ -294,6 +294,60 @@
       border: 1px dashed #66fcf1;
       background: rgba(102, 252, 241, 0.15) !important;
     }
+
+    /* Bottom Left Controls Bar */
+    #video-controls {
+      position: absolute;
+      bottom: 25px;
+      left: 25px;
+      display: flex;
+      gap: 10px;
+      background: rgba(11, 12, 16, 0.85);
+      border: 1px solid rgba(102, 252, 241, 0.3);
+      padding: 8px 12px;
+      border-radius: 30px;
+      z-index: 250;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+      backdrop-filter: blur(8px);
+      opacity: 0;
+      transition: opacity 0.4s ease;
+      pointer-events: none;
+    }
+
+    #video-controls.visible {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .control-btn {
+      background: none;
+      border: none;
+      color: #66fcf1;
+      cursor: pointer;
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.2s, transform 0.1s;
+      outline: none;
+    }
+
+    .control-btn:hover {
+      background: rgba(102, 252, 241, 0.15);
+      transform: scale(1.1);
+    }
+
+    .control-btn:active {
+      transform: scale(0.95);
+    }
+
+    .control-btn svg {
+      width: 22px;
+      height: 22px;
+      fill: #66fcf1;
+    }
   </style>
 </head>
 <body>
@@ -319,8 +373,24 @@
       </button>
     </div>
 
-    <video id="video-player" controls autoplay muted playsinline preload="auto" name="media"></video>
+    <video id="video-player" autoplay muted playsinline preload="auto" name="media"></video>
     <iframe id="web-frame" style="position:absolute; top:0; left:0; width:100%; height:100%; border:none; display:none; background:#000;" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>
+
+    <!-- Bottom Left Video Controls -->
+    <div id="video-controls">
+      <button class="control-btn" id="rewind-btn" onclick="rewindVideo()" title="Rewind 15s">
+        <svg viewBox="0 0 24 24"><path d="M11 18V6l-8.5 6 8.5 6zm.5-6l8.5 6V6l-8.5 6z"/></svg>
+      </button>
+      <button class="control-btn" id="play-btn" onclick="playVideo()" title="Play">
+        <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+      </button>
+      <button class="control-btn" id="pause-btn" onclick="pauseVideo()" title="Pause">
+        <svg viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+      </button>
+      <button class="control-btn" id="forward-btn" onclick="forwardVideo()" title="Forward 15s">
+        <svg viewBox="0 0 24 24"><path d="M4 18l8.5-6L4 6v12zm9-12v12l8.5-6L13 6z"/></svg>
+      </button>
+    </div>
 
     <div id="idle-screen">
       <div class="glow-circle">
@@ -780,19 +850,45 @@
           playPromise.then(function() { showToast('Playing stream'); }).catch(handlePlayBlock);
         }
       }
+      // Start the media playback verification watchdog to bypass browser autoplay rules
+      startPlayWatchdog();
     }
 
+    var autoplayMutedFallback = false;
+    var controlsTimeout = null;
+    var controlsEl = document.getElementById('video-controls');
+    var watchdogTimer = null;
+
     function handlePlayBlock(error) {
-      showToast('Autoplay blocked. Tap screen to play with audio.');
-      console.log("Playback interaction required: ", error);
+      console.log("Playback interaction required or autoplay blocked: ", error);
+      showToast('Autoplay blocked. Attempting muted playback...');
+      autoplayMutedFallback = true;
+      video.muted = true;
+      var playPromise = video.play();
+      if (playPromise !== undefined) {
+        playPromise.catch(function(e) {
+          console.error("Muted playback fallback failed:", e);
+          showToast('Click/tap anywhere to play');
+        });
+      }
     }
 
     // Try unmuting automatically once play succeeds
     video.onplaying = function() {
-      // Small timeout to satisfy browser play triggers
-      setTimeout(function() {
-        video.muted = false;
-      }, 300);
+      showControls();
+      if (!autoplayMutedFallback) {
+        setTimeout(function() {
+          video.muted = false;
+        }, 300);
+      }
+    };
+
+    video.onplay = function() {
+      showControls();
+    };
+
+    video.onpause = function() {
+      showControls();
     };
 
     // Auto play next video in queue when current video ends
@@ -801,18 +897,202 @@
       skipToNext();
     };
 
+    function handleUserInteraction() {
+      if (video.src) {
+        if (video.muted) {
+          video.muted = false;
+          showToast('Audio unmuted');
+        }
+        if (video.paused) {
+          video.play();
+          showToast('Playback resumed');
+        }
+        autoplayMutedFallback = false;
+      }
+    }
+
     // Interactive fallback for older TVs that require user gesture to trigger video play
     document.body.addEventListener('click', function(e) {
-      // Don't trigger play/unmute if clicking inside the sidebar menu
-      if (sidebar.contains(e.target) || document.getElementById('menu-btn').contains(e.target)) {
+      // Don't trigger play/unmute if clicking inside the sidebar menu, menu-btn, or video-controls
+      if (sidebar.contains(e.target) || 
+          document.getElementById('menu-btn').contains(e.target) ||
+          controlsEl.contains(e.target)) {
         return;
       }
-      if (video.src) {
-        video.muted = false;
-        video.play();
-        showToast('Playback started with audio');
-      }
+      handleUserInteraction();
     });
+
+    document.body.addEventListener('touchstart', function(e) {
+      if (sidebar.contains(e.target) || 
+          document.getElementById('menu-btn').contains(e.target) ||
+          controlsEl.contains(e.target)) {
+        return;
+      }
+      handleUserInteraction();
+    });
+
+    function isVideoPlaying() {
+      if (video.style.display === 'block') {
+        return !video.paused;
+      }
+      if (webFrame.style.display === 'block') {
+        try {
+          var iframeDoc = webFrame.contentDocument || webFrame.contentWindow.document;
+          if (iframeDoc) {
+            var vids = iframeDoc.getElementsByTagName('video');
+            if (vids.length > 0) {
+              return !vids[0].paused;
+            }
+          }
+        } catch (e) {}
+        return true; // default to true for YouTube/Vimeo iframe
+      }
+      return false;
+    }
+
+    function showControls() {
+      if (video.style.display !== 'block' && webFrame.style.display !== 'block') {
+        controlsEl.classList.remove('visible');
+        return;
+      }
+      
+      controlsEl.classList.add('visible');
+      
+      if (controlsTimeout) {
+        clearTimeout(controlsTimeout);
+      }
+      
+      if (isVideoPlaying()) {
+        controlsTimeout = setTimeout(hideControls, 3000);
+      }
+    }
+
+    function hideControls() {
+      if (isVideoPlaying()) {
+        controlsEl.classList.remove('visible');
+      }
+    }
+
+    function controlIframeVideo(action) {
+      try {
+        var iframeDoc = webFrame.contentDocument || webFrame.contentWindow.document;
+        if (iframeDoc) {
+          var vids = iframeDoc.getElementsByTagName('video');
+          if (vids.length > 0) {
+            var v = vids[0];
+            if (action === 'play') {
+              v.play();
+            } else if (action === 'pause') {
+              v.pause();
+            } else if (action === 'rewind') {
+              v.currentTime = Math.max(0, v.currentTime - 15);
+            } else if (action === 'forward') {
+              v.currentTime = Math.min(v.duration || 0, v.currentTime + 15);
+            }
+            return;
+          }
+        }
+      } catch (e) {
+        // Cross-origin
+      }
+
+      // YouTube API messages
+      if (action === 'play') {
+        webFrame.contentWindow.postMessage(JSON.stringify({event: 'command', func: 'playVideo', args: []}), '*');
+      } else if (action === 'pause') {
+        webFrame.contentWindow.postMessage(JSON.stringify({event: 'command', func: 'pauseVideo', args: []}), '*');
+      }
+      // Vimeo API messages
+      if (action === 'play') {
+        webFrame.contentWindow.postMessage(JSON.stringify({method: 'play'}), '*');
+      } else if (action === 'pause') {
+        webFrame.contentWindow.postMessage(JSON.stringify({method: 'pause'}), '*');
+      }
+    }
+
+    function playVideo() {
+      if (video.style.display === 'block') {
+        video.play();
+      } else if (webFrame.style.display === 'block') {
+        controlIframeVideo('play');
+      }
+      showControls();
+    }
+
+    function pauseVideo() {
+      if (video.style.display === 'block') {
+        video.pause();
+      } else if (webFrame.style.display === 'block') {
+        controlIframeVideo('pause');
+      }
+      showControls();
+    }
+
+    function rewindVideo() {
+      if (video.style.display === 'block') {
+        video.currentTime = Math.max(0, video.currentTime - 15);
+      } else if (webFrame.style.display === 'block') {
+        controlIframeVideo('rewind');
+      }
+      showControls();
+    }
+
+    function forwardVideo() {
+      if (video.style.display === 'block') {
+        video.currentTime = Math.min(video.duration || 0, video.currentTime + 15);
+      } else if (webFrame.style.display === 'block') {
+        controlIframeVideo('forward');
+      }
+      showControls();
+    }
+
+    function startPlayWatchdog() {
+      if (watchdogTimer) {
+        clearTimeout(watchdogTimer);
+      }
+      
+      autoplayMutedFallback = false;
+      
+      watchdogTimer = setTimeout(function() {
+        if (video.style.display === 'block') {
+          if (video.paused || video.currentTime === 0) {
+            console.log("Watchdog: Video playback stuck/paused after 1.5s. Forcing muted playback...");
+            autoplayMutedFallback = true;
+            video.muted = true;
+            var playPromise = video.play();
+            if (playPromise !== undefined) {
+              playPromise.then(function() {
+                showToast('Muted playback forced by watchdog. Click screen to unmute.');
+              }).catch(function(err) {
+                console.error("Watchdog: Forced play failed:", err);
+                showToast('Playback blocked. Click screen to play.');
+              });
+            }
+          }
+        } else if (webFrame.style.display === 'block') {
+          try {
+            var iframeDoc = webFrame.contentDocument || webFrame.contentWindow.document;
+            if (iframeDoc) {
+              var vids = iframeDoc.getElementsByTagName('video');
+              if (vids.length > 0) {
+                var iframeVideo = vids[0];
+                if (iframeVideo.paused || iframeVideo.currentTime === 0) {
+                  console.log("Watchdog: Iframe video stuck/paused. Forcing play...");
+                  iframeVideo.muted = true;
+                  iframeVideo.play();
+                }
+              }
+            }
+          } catch (e) {
+            controlIframeVideo('play');
+          }
+        }
+      }, 1500);
+    }
+
+    document.addEventListener('mousemove', showControls);
+    document.addEventListener('click', showControls);
+    document.addEventListener('keydown', showControls);
 
     // Listen to iframe postMessage events (e.g. YouTube and Vimeo state changes)
     window.addEventListener('message', function(event) {
