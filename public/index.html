@@ -801,6 +801,130 @@
       }
     });
 
+    function handleIframeVideo(targetVideo, iframeDoc) {
+      try {
+        var src = targetVideo.currentSrc || targetVideo.src;
+        if (!src) {
+          var sources = targetVideo.getElementsByTagName('source');
+          if (sources.length > 0) {
+            src = sources[0].src;
+          }
+        }
+
+        console.log("Detected video tag inside iframe. Source:", src);
+
+        if (src && src.indexOf('blob:') !== 0 && src.indexOf('http') === 0) {
+          console.log("Direct video URL extracted. Redirecting to native player:", src);
+          showToast("Video extracted! Playing in hardware player...");
+          webFrame.src = 'about:blank'; // Clear iframe to prevent loops
+          playMediaWithConfig(src, false);
+          return;
+        }
+
+        // Fallback: Maximize video inside iframe viewport
+        console.log("Video source is blob or MSE. Maximizing inside iframe...");
+        showToast("Maximizing page video in full screen...");
+        
+        var style = iframeDoc.getElementById('tv-cast-maximize-style');
+        if (!style) {
+          style = iframeDoc.createElement('style');
+          style.id = 'tv-cast-maximize-style';
+          style.textContent = `
+            html, body {
+              overflow: hidden !important;
+              background: #000 !important;
+              width: 100% !important;
+              height: 100% !important;
+              margin: 0 !important;
+              padding: 0 !important;
+            }
+            video {
+              position: fixed !important;
+              top: 0 !important;
+              left: 0 !important;
+              width: 100vw !important;
+              height: 100vh !important;
+              z-index: 99999999 !important;
+              background: #000 !important;
+            }
+          `;
+          iframeDoc.head.appendChild(style);
+        }
+
+        var parent = targetVideo.parentElement;
+        while (parent && parent !== iframeDoc.body) {
+          parent.style.position = 'static';
+          parent.style.overflow = 'visible';
+          parent.style.width = '100%';
+          parent.style.height = '100%';
+          parent = parent.parentElement;
+        }
+
+        try {
+          targetVideo.play();
+          targetVideo.muted = false;
+        } catch (e) {
+          console.warn("Autoplay block inside iframe: ", e);
+        }
+
+        targetVideo.onended = function() {
+          console.log("Iframe video ended. Skipping to next...");
+          skipToNext();
+        };
+      } catch (err) {
+        console.error("Error handling iframe video: ", err);
+      }
+    }
+
+    // Scan proxied iframe pages for HTML5 video elements to extract or maximize
+    webFrame.onload = function() {
+      try {
+        var iframeDoc = webFrame.contentDocument || webFrame.contentWindow.document;
+        if (!iframeDoc) return;
+
+        var currentHref = webFrame.contentWindow.location.href;
+        if (currentHref === 'about:blank' || webFrame.src === 'about:blank') {
+          return;
+        }
+
+        console.log("Iframe loaded page: " + currentHref + ". Scanning for videos...");
+
+        // 1. Scan immediately
+        var videos = iframeDoc.getElementsByTagName('video');
+        if (videos.length > 0) {
+          handleIframeVideo(videos[0], iframeDoc);
+          return;
+        }
+
+        // 2. Scan periodically for 10 seconds to catch dynamically loaded videos
+        var scanAttempts = 0;
+        var scanInterval = setInterval(function() {
+          scanAttempts++;
+          if (scanAttempts > 20) {
+            clearInterval(scanInterval);
+            return;
+          }
+          try {
+            var doc = webFrame.contentDocument || webFrame.contentWindow.document;
+            if (!doc || webFrame.src === 'about:blank') {
+              clearInterval(scanInterval);
+              return;
+            }
+            var vids = doc.getElementsByTagName('video');
+            if (vids.length > 0) {
+              clearInterval(scanInterval);
+              handleIframeVideo(vids[0], doc);
+            }
+          } catch (err) {
+            clearInterval(scanInterval);
+          }
+        }, 500);
+
+      } catch (err) {
+        console.warn("Cannot access iframe DOM (CORS/Origins): ", err);
+      }
+    };
+
     // Run poll every 2 seconds
     setInterval(checkState, 2000);
     
