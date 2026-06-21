@@ -225,22 +225,49 @@
   </div>
 
   <script>
-    const statusBar = document.getElementById('status-bar');
+    var statusBar = document.getElementById('status-bar');
 
     // Automatically fill in default server URL if hosted
-    document.getElementById('server-address').value = window.location.origin;
+    document.getElementById('server-address').value = window.location.origin || (window.location.protocol + "//" + window.location.host);
 
-    function showStatus(message, type = '') {
+    function showStatus(message, type) {
+      type = type || '';
       statusBar.innerText = message;
       statusBar.style.display = 'block';
       statusBar.className = type;
     }
 
-    async function castMedia() {
-      let serverAddress = document.getElementById('server-address').value.trim();
-      const videoUrl = document.getElementById('video-url').value.trim();
-      const videoTitle = document.getElementById('video-title').value.trim();
-      const forcePlay = document.getElementById('force-play').checked;
+    function makeRequest(method, url, data, callback) {
+      var xhr = new XMLHttpRequest();
+      xhr.open(method, url, true);
+      if (method === 'POST') {
+        xhr.setRequestHeader('Content-Type', 'application/json');
+      }
+      xhr.onreadystatechange = function() {
+        if (xhr.readyState === 4) {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            try {
+              var res = JSON.parse(xhr.responseText);
+              callback(null, res);
+            } catch(e) {
+              callback(null, xhr.responseText);
+            }
+          } else {
+            callback(new Error("Status: " + xhr.status), null);
+          }
+        }
+      };
+      xhr.onerror = function() {
+        callback(new Error("Network Error"), null);
+      };
+      xhr.send(data ? JSON.stringify(data) : null);
+    }
+
+    function castMedia() {
+      var serverAddress = document.getElementById('server-address').value.trim();
+      var videoUrl = document.getElementById('video-url').value.trim();
+      var videoTitle = document.getElementById('video-title').value.trim();
+      var forcePlay = document.getElementById('force-play').checked;
 
       if (!videoUrl) {
         showStatus('Error: Please paste a video or website link.', 'error');
@@ -248,74 +275,53 @@
       }
 
       if (!serverAddress) {
-        serverAddress = window.location.origin;
+        serverAddress = window.location.origin || (window.location.protocol + "//" + window.location.host);
       }
 
       showStatus('Connecting & resolving stream...', '');
 
       // Ensure endpoint has standard schema
-      if (!serverAddress.startsWith('http://') && !serverAddress.startsWith('https://')) {
+      if (serverAddress.indexOf('http://') !== 0 && serverAddress.indexOf('https://') !== 0) {
         serverAddress = 'http://' + serverAddress;
       }
 
-      const endpoint = `${serverAddress}/api/play`;
+      var endpoint = serverAddress + '/api/play';
 
-      try {
-        const response = await fetch(endpoint, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            url: videoUrl,
-            title: videoTitle,
-            force: forcePlay
-          })
-        });
-
-        const data = await response.json();
-
-        if (response.ok && data.success) {
-          showStatus(`Success! Casted media to the receiver.`, 'success');
+      makeRequest('POST', endpoint, {
+        url: videoUrl,
+        title: videoTitle,
+        force: forcePlay
+      }, function(err, data) {
+        if (!err && data && data.success) {
+          showStatus('Success! Casted media to the receiver.', 'success');
           document.getElementById('video-url').value = ''; // Clear input on success
         } else {
-          showStatus(`Error: ${data.error || 'Failed to cast media.'}`, 'error');
+          showStatus('Error: ' + ((data && data.error) || (err && err.message) || 'Failed to cast media.'), 'error');
         }
-      } catch (err) {
-        showStatus(`Connection failed: ${err.message}. Make sure the server URL is correct.`, 'error');
-      }
+      });
     }
 
-    async function skipMedia() {
-      let serverAddress = document.getElementById('server-address').value.trim();
+    function skipMedia() {
+      var serverAddress = document.getElementById('server-address').value.trim();
       if (!serverAddress) {
-        serverAddress = window.location.origin;
+        serverAddress = window.location.origin || (window.location.protocol + "//" + window.location.host);
       }
 
-      if (!serverAddress.startsWith('http://') && !serverAddress.startsWith('https://')) {
+      if (serverAddress.indexOf('http://') !== 0 && serverAddress.indexOf('https://') !== 0) {
         serverAddress = 'http://' + serverAddress;
       }
 
       showStatus('Skipping to next media...', '');
 
-      try {
-        const response = await fetch(`${serverAddress}/api/next`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          }
-        });
+      var endpoint = serverAddress + '/api/next';
 
-        const data = await response.json();
-
-        if (response.ok && data.success) {
-          showStatus(`Skipped to next video!`, 'success');
+      makeRequest('POST', endpoint, null, function(err, data) {
+        if (!err && data && data.success) {
+          showStatus('Skipped to next video!', 'success');
         } else {
-          showStatus(`Error: ${data.error || 'Failed to skip.'}`, 'error');
+          showStatus('Error: ' + ((data && data.error) || (err && err.message) || 'Failed to skip.'), 'error');
         }
-      } catch (err) {
-        showStatus(`Connection failed: ${err.message}.`, 'error');
-      }
+      });
     }
   </script>
 </body>

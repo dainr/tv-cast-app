@@ -319,7 +319,7 @@
       </button>
     </div>
 
-    <video id="video-player" controls autoplay muted playsinline name="media"></video>
+    <video id="video-player" controls autoplay muted playsinline preload="auto" name="media"></video>
     <iframe id="web-frame" style="position:absolute; top:0; left:0; width:100%; height:100%; border:none; display:none; background:#000;" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>
 
     <div id="idle-screen">
@@ -338,16 +338,16 @@
 
     <div id="toast">Casting stream...</div>
   </div>  <script>
-    const video = document.getElementById('video-player');
-    const webFrame = document.getElementById('web-frame');
-    const idleScreen = document.getElementById('idle-screen');
-    const toast = document.getElementById('toast');
-    const serverUrlDisplay = document.getElementById('server-url');
+    var video = document.getElementById('video-player');
+    var webFrame = document.getElementById('web-frame');
+    var idleScreen = document.getElementById('idle-screen');
+    var toast = document.getElementById('toast');
+    var serverUrlDisplay = document.getElementById('server-url');
     
     // Sidebar DOM elements
-    const sidebar = document.getElementById('queue-sidebar');
-    const queueList = document.getElementById('queue-list');
-    const queueCount = document.getElementById('queue-count');
+    var sidebar = document.getElementById('queue-sidebar');
+    var queueList = document.getElementById('queue-list');
+    var queueCount = document.getElementById('queue-count');
     
     var localQueue = [];
 
@@ -358,24 +358,51 @@
     var origin = window.location.origin || (window.location.protocol + "//" + window.location.host);
     document.getElementById('controller-link').innerText = origin + "/controller";
 
-    let lastTimestamp = 0;
+    var lastTimestamp = 0;
 
     // Show a small toast notification
     function showToast(text) {
       toast.innerText = text;
       toast.style.opacity = '1';
-      setTimeout(() => {
+      setTimeout(function() {
         toast.style.opacity = '0';
       }, 3000);
     }
 
+    // Traditional ES5 callback AJAX helper to replace modern fetch/Promise APIs
+    function makeRequest(method, url, data, callback) {
+      var xhr = new XMLHttpRequest();
+      xhr.open(method, url, true);
+      if (method === 'POST') {
+        xhr.setRequestHeader('Content-Type', 'application/json');
+      }
+      xhr.onreadystatechange = function() {
+        if (xhr.readyState === 4) {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            try {
+              var res = JSON.parse(xhr.responseText);
+              callback(null, res);
+            } catch(e) {
+              callback(null, xhr.responseText);
+            }
+          } else {
+            callback(new Error("Status: " + xhr.status), null);
+          }
+        }
+      };
+      xhr.onerror = function() {
+        callback(new Error("Network Error"), null);
+      };
+      xhr.send(data ? JSON.stringify(data) : null);
+    }
+
     // Polling function designed to work on all TV browsers (including legacy ones lacking WebSockets/SSE)
-    async function checkState() {
-      try {
-        const response = await fetch('/api/state');
-        if (!response.ok) return;
-        
-        const data = await response.json();
+    function checkState() {
+      makeRequest('GET', '/api/state', null, function(err, data) {
+        if (err) {
+          console.error('Error checking state:', err);
+          return;
+        }
         
         // Render updated queue
         renderQueue(data.queue);
@@ -384,9 +411,7 @@
           lastTimestamp = data.timestamp;
           playMedia(data.url);
         }
-      } catch (err) {
-        console.error('Error checking state:', err);
-      }
+      });
     }
 
     // Sidebar interaction functions
@@ -394,22 +419,20 @@
       sidebar.classList.toggle('open');
     }
 
-    async function skipToNext() {
-      try {
-        showToast("Loading next video...");
-        const response = await fetch('/api/next', { method: 'POST' });
-        const data = await response.json();
-        if (data.success) {
+    function skipToNext() {
+      showToast("Loading next video...");
+      makeRequest('POST', '/api/next', null, function(err, data) {
+        if (!err && data && data.success) {
           lastTimestamp = data.state.timestamp;
           if (data.state.url) {
             playMedia(data.state.url);
           } else {
             resetToIdle();
           }
+        } else {
+          console.error("Failed to skip to next:", err);
         }
-      } catch (err) {
-        console.error("Failed to skip to next:", err);
-      }
+      });
     }
 
     function resetToIdle() {
@@ -425,39 +448,28 @@
       showToast("Queue finished. Idle.");
     }
 
-    async function deleteQueueItem(itemId) {
-      try {
-        const response = await fetch('/api/queue/delete', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id: itemId })
-        });
-        const data = await response.json();
-        if (data.success) {
+    function deleteQueueItem(itemId) {
+      makeRequest('POST', '/api/queue/delete', { id: itemId }, function(err, data) {
+        if (!err && data && data.success) {
           renderQueue(data.state.queue);
+        } else {
+          console.error("Failed to delete queue item:", err);
         }
-      } catch (err) {
-        console.error("Failed to delete queue item:", err);
-      }
+      });
     }
 
-    async function sendReorder(ids) {
-      try {
-        const response = await fetch('/api/queue/reorder', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ids: ids })
-        });
-        const data = await response.json();
-        if (data.success) {
+    // Updates state order on server
+    function sendReorder(ids) {
+      makeRequest('POST', '/api/queue/reorder', { ids: ids }, function(err, data) {
+        if (!err && data && data.success) {
           renderQueue(data.state.queue);
+        } else {
+          console.error("Failed to reorder queue:", err);
         }
-      } catch (err) {
-        console.error("Failed to reorder queue:", err);
-      }
+      });
     }
 
-    async function moveQueueItem(index, direction) {
+    function moveQueueItem(index, direction) {
       var targetIndex = index + direction;
       if (targetIndex < 0 || targetIndex >= localQueue.length) return;
       
@@ -467,7 +479,7 @@
       localQueue[targetIndex] = temp;
       
       var ids = localQueue.map(function(item) { return item.id; });
-      await sendReorder(ids);
+      sendReorder(ids);
     }
 
     function renderQueue(queue) {
@@ -481,7 +493,7 @@
       }
       
       localQueue.forEach(function(item, index) {
-        const li = document.createElement('li');
+        var li = document.createElement('li');
         li.className = 'queue-item';
         
         // Drag and drop event listeners
@@ -522,18 +534,18 @@
           sendReorder(ids);
         };
         
-        const titleDiv = document.createElement('div');
+        var titleDiv = document.createElement('div');
         titleDiv.className = 'queue-item-title';
         titleDiv.innerText = (index + 1) + ". " + (item.title || 'Cast Video');
         titleDiv.title = item.title;
         li.appendChild(titleDiv);
         
-        const actionsDiv = document.createElement('div');
+        var actionsDiv = document.createElement('div');
         actionsDiv.className = 'queue-item-actions';
         
         // Move Up Button
         if (index > 0) {
-          const upBtn = document.createElement('button');
+          var upBtn = document.createElement('button');
           upBtn.className = 'action-btn';
           upBtn.innerHTML = '▲';
           upBtn.title = "Move Up";
@@ -546,7 +558,7 @@
         
         // Move Down Button
         if (index < localQueue.length - 1) {
-          const downBtn = document.createElement('button');
+          var downBtn = document.createElement('button');
           downBtn.className = 'action-btn';
           downBtn.innerHTML = '▼';
           downBtn.title = "Move Down";
@@ -558,7 +570,7 @@
         }
         
         // Delete Button
-        const delBtn = document.createElement('button');
+        var delBtn = document.createElement('button');
         delBtn.className = 'action-btn delete';
         delBtn.innerHTML = '🗑️';
         delBtn.title = "Delete";
@@ -581,25 +593,15 @@
       });
     }
 
-    async function playMediaImmediately(item) {
-      try {
-        const response = await fetch('/api/play', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            url: item.url,
-            title: item.title,
-            force: true // Force overwrite active video
-          })
-        });
-        const data = await response.json();
-        if (data.success) {
+    function playMediaImmediately(item) {
+      makeRequest('POST', '/api/play', { url: item.url, title: item.title, force: true }, function(err, data) {
+        if (!err && data && data.success) {
           // Remove from queue
           deleteQueueItem(item.id);
+        } else {
+          console.error("Failed to play enqueued item:", err);
         }
-      } catch (err) {
-        console.error("Failed to play enqueued item:", err);
-      }
+      });
     }
 
     // Start playing the casted media
@@ -718,8 +720,17 @@
             playPromise.then(function() { showToast('Playing stream'); }).catch(handlePlayBlock);
           }
         } else if (typeof Hls !== 'undefined' && Hls.isSupported()) {
-          // Standard browser fallback using hls.js (Chrome / Firefox / Opera)
-          hlsInstance = new Hls();
+          // Standard browser fallback using hls.js with buffering optimization for slow networks
+          var hlsConfig = {
+            maxBufferLength: 30,
+            maxMaxBufferLength: 60,
+            maxBufferSize: 50 * 1000 * 1000,
+            maxBufferHole: 0.5,
+            nudgeMaxRetries: 10,
+            nudgeDelay: 100,
+            lowLatencyMode: false
+          };
+          hlsInstance = new Hls(hlsConfig);
           hlsInstance.loadSource(finalUrl);
           hlsInstance.attachMedia(video);
           hlsInstance.on(Hls.Events.MANIFEST_PARSED, function() {
@@ -768,7 +779,7 @@
     };
 
     // Interactive fallback for older TVs that require user gesture to trigger video play
-    document.body.addEventListener('click', (e) => {
+    document.body.addEventListener('click', function(e) {
       // Don't trigger play/unmute if clicking inside the sidebar menu
       if (sidebar.contains(e.target) || document.getElementById('menu-btn').contains(e.target)) {
         return;
@@ -829,25 +840,8 @@
         if (!style) {
           style = iframeDoc.createElement('style');
           style.id = 'tv-cast-maximize-style';
-          style.textContent = `
-            html, body {
-              overflow: hidden !important;
-              background: #000 !important;
-              width: 100% !important;
-              height: 100% !important;
-              margin: 0 !important;
-              padding: 0 !important;
-            }
-            video {
-              position: fixed !important;
-              top: 0 !important;
-              left: 0 !important;
-              width: 100vw !important;
-              height: 100vh !important;
-              z-index: 99999999 !important;
-              background: #000 !important;
-            }
-          `;
+          style.textContent = 'html, body { overflow: hidden !important; background: #000 !important; width: 100% !important; height: 100% !important; margin: 0 !important; padding: 0 !important; }\n' +
+                              'video { position: fixed !important; top: 0 !important; left: 0 !important; width: 100vw !important; height: 100vh !important; z-index: 99999999 !important; background: #000 !important; }';
           iframeDoc.head.appendChild(style);
         }
 

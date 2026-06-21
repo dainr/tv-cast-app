@@ -32,8 +32,10 @@ def strip_frame_restrictive_meta(html_text):
     return html_text
 
 
-def resolve_media_url(url):
+# Simple in-memory cache to speed up yt-dlp resolution and prevent redundant network hits
+resolution_cache = {}
 
+def resolve_media_url(url):
     if not url:
         return url
     
@@ -41,6 +43,13 @@ def resolve_media_url(url):
     lower_path = urllib.parse.urlparse(url).path.lower()
     if lower_path.endswith(('.mp4', '.webm', '.m3u8', '.mp3', '.ogg', '.ogv', '.mov', '.ts', '.aac', '.wav')):
         return url
+
+    # Check cache (30 minutes expiry)
+    if url in resolution_cache:
+        cached_val, cached_time = resolution_cache[url]
+        if time.time() - cached_time < 1800:
+            print(f"URL Resolution Cache hit for: {url[:60]}...")
+            return cached_val
 
     try:
         import yt_dlp
@@ -59,6 +68,7 @@ def resolve_media_url(url):
             direct_url = info.get('url')
             if direct_url:
                 print(f"Successfully resolved webpage to direct video URL.")
+                resolution_cache[url] = (direct_url, time.time())
                 return direct_url
     except ImportError:
         print("Warning: yt-dlp is not installed. Using raw URL.")
